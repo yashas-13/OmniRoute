@@ -31,8 +31,7 @@ class OmniRouteClient(
     suspend fun resilience(): Result<String> = get("/api/resilience")
     suspend fun rateLimits(): Result<String> = get("/api/rate-limits")
 
-    private suspend fun getOptional(path: String): String? =
-        get(path).getOrNull()
+    private suspend fun getOptional(path: String): String? = get(path).getOrNull()
 
     private suspend fun get(path: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
