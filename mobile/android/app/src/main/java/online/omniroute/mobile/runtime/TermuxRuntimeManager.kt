@@ -23,7 +23,6 @@ class TermuxIntentCommandRunner(private val context: Context) : TermuxCommandRun
                 putExtra("com.termux.RUN_COMMAND_ARGUMENTS", command.drop(1).toTypedArray())
                 putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home")
                 putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
-                putExtra("com.termux.RUN_COMMAND_COMMAND_LABEL", "OmniRoute runtime")
             }
             context.startService(intent)
         }
@@ -37,8 +36,8 @@ class TermuxRuntimeManager(
     private val runtimeRoot = policy.validateChildPath(policy.workingDirectory)
 
     suspend fun bootstrap(): Result<Unit> {
-        val home = shellQuote(policy.homeDirectory.path)
-        val root = shellQuote(runtimeRoot.path)
+        val home = shellQuote(policy.homeDirectory)
+        val root = shellQuote(runtimeRoot)
         val script = """
             set -eu
             export HOME=$home
@@ -57,18 +56,18 @@ class TermuxRuntimeManager(
     }
 
     suspend fun start(): Result<Unit> {
-        val home = shellQuote(policy.homeDirectory.path)
-        val root = shellQuote(runtimeRoot.path)
-        val log = shellQuote(runtimeRoot.resolve("omniroute.log").path)
-        val pid = shellQuote(runtimeRoot.resolve(".omniroute.pid").path)
+        val home = shellQuote(policy.homeDirectory)
+        val root = shellQuote(runtimeRoot)
+        val log = shellQuote("$runtimeRoot/omniroute.log")
+        val pid = shellQuote("$runtimeRoot/.omniroute.pid")
         val command = "cd $root && export HOME=$home && export OMNIROUTE_HOST=127.0.0.1 && export PORT=${policy.port} && nohup omniroute >> $log 2>&1 & echo \$! > $pid"
         return runner.run(bash(command))
     }
 
     suspend fun stop(): Result<Unit> {
-        val home = shellQuote(policy.homeDirectory.path)
-        val root = shellQuote(runtimeRoot.path)
-        val pid = shellQuote(runtimeRoot.resolve(".omniroute.pid").path)
+        val home = shellQuote(policy.homeDirectory)
+        val root = shellQuote(runtimeRoot)
+        val pid = shellQuote("$runtimeRoot/.omniroute.pid")
         val command = "export HOME=$home; cd $root; if [ -f $pid ]; then kill \"\$(cat $pid)\" 2>/dev/null || true; rm -f $pid; fi"
         return runner.run(bash(command))
     }
