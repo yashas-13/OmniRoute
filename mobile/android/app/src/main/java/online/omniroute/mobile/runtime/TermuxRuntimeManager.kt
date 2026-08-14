@@ -70,7 +70,7 @@ class TermuxRuntimeManager(
             nohup omniroute >> $log 2>&1 &
             echo \$! > $pid
         """.trimIndent()
-        return runner.run(bash(command)).map { Unit }
+        return runner.run(bash(command))
     }
 
     suspend fun stop(): Result<Unit> {
@@ -78,11 +78,11 @@ class TermuxRuntimeManager(
         val root = shellQuote(runtimeRoot)
         val pid = shellQuote("$runtimeRoot/.omniroute.pid")
         val command = "export HOME=$home; cd $root; if [ -f $pid ]; then kill \"\$(cat $pid)\" 2>/dev/null || true; rm -f $pid; fi"
-        return runner.run(bash(command)).map { Unit }
+        return runner.run(bash(command))
     }
 
     private fun bash(script: String): List<String> = listOf(
-        "/data/data/com.termux/files/usr/bin/bash", "-lc", script
+        "/data/data/com.termux/files/usr/bin/bash", "-lc", script,
     )
 
     private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
