@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import online.omniroute.mobile.gateway.OmniRouteClient
 import online.omniroute.mobile.runtime.RuntimePolicy
 import online.omniroute.mobile.runtime.RuntimeState
 import online.omniroute.mobile.runtime.RuntimeStatus
@@ -51,10 +52,15 @@ private enum class AppTab(val label: String) {
 
 class MainActivity : ComponentActivity() {
     private val runtimeViewModel: RuntimeViewModel by viewModels {
+        val policy = RuntimePolicy()
         RuntimeViewModelFactory(
-            TermuxRuntimeManager(
+            manager = TermuxRuntimeManager(
                 runner = TermuxIntentCommandRunner(applicationContext),
-                policy = RuntimePolicy(),
+                policy = policy,
+            ),
+            client = OmniRouteClient(
+                baseUrl = "http://127.0.0.1:${policy.port}",
+                apiKeyProvider = { null },
             ),
         )
     }
@@ -68,6 +74,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun OmniRouteApp(viewModel: RuntimeViewModel) {
     val status by viewModel.status.collectAsStateWithLifecycle()
+    val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(AppTab.HOME) }
 
     MaterialTheme {
@@ -89,10 +96,10 @@ private fun OmniRouteApp(viewModel: RuntimeViewModel) {
                 },
             ) { padding ->
                 when (tab) {
-                    AppTab.HOME -> HomeScreen(status, viewModel, Modifier.padding(padding))
-                    AppTab.PROVIDERS -> ProvidersScreen(Modifier.padding(padding))
-                    AppTab.ROUTING -> RoutingScreen(Modifier.padding(padding))
-                    AppTab.USAGE -> UsageScreen(Modifier.padding(padding))
+                    AppTab.HOME -> HomeScreen(status, snapshot, viewModel, Modifier.padding(padding))
+                    AppTab.PROVIDERS -> ProvidersScreen(snapshot?.models?.count, Modifier.padding(padding))
+                    AppTab.ROUTING -> RoutingScreen(status, Modifier.padding(padding))
+                    AppTab.USAGE -> UsageScreen(snapshot?.rateLimits, Modifier.padding(padding))
                     AppTab.SETTINGS -> SettingsScreen(status, Modifier.padding(padding))
                 }
             }
@@ -101,43 +108,36 @@ private fun OmniRouteApp(viewModel: RuntimeViewModel) {
 }
 
 @Composable
-private fun HomeScreen(status: RuntimeStatus, viewModel: RuntimeViewModel, modifier: Modifier = Modifier) {
+private fun HomeScreen(status: RuntimeStatus, snapshot: online.omniroute.mobile.gateway.GatewaySnapshot?, viewModel: RuntimeViewModel, modifier: Modifier = Modifier) {
     val running = status.state == RuntimeState.RUNNING || status.state == RuntimeState.DEGRADED
     val busy = status.state == RuntimeState.INSTALLING || status.state == RuntimeState.STARTING || status.state == RuntimeState.STOPPING
-
-    Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (!running && status.state == RuntimeState.UNAVAILABLE) {
-            OnboardingCard(onStart = viewModel::installAndStart)
+            OnboardingCard(viewModel::installAndStart)
         } else {
             GatewayCard(status, running, busy, viewModel)
         }
-        HealthCard(status)
+        HealthCard(status, snapshot, viewModel)
         RuntimeCard(status)
     }
 }
 
 @Composable
 private fun OnboardingCard(onStart: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Run OmniRoute on your phone", style = MaterialTheme.typography.headlineSmall)
-            Text(
-                "The native app manages a dedicated Termux runtime. You do not need to run Node.js, npm, or shell commands manually.",
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text("Your gateway will default to 127.0.0.1:20128.")
-            Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Get Started") }
+            Text("The native app manages a dedicated Termux runtime. You do not need to run Node.js, npm, or shell commands manually.", style = MaterialTheme.typography.bodyLarge)
+            Text("The gateway is local-only by default: 127.0.0.1:20128")
+            Button(onClick = onStart, Modifier.fillMaxWidth()) { Text("Get Started") }
         }
     }
 }
 
 @Composable
 private fun GatewayCard(status: RuntimeStatus, running: Boolean, busy: Boolean, viewModel: RuntimeViewModel) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Gateway", style = MaterialTheme.typography.titleLarge)
             Text(gatewayLabel(status.state), style = MaterialTheme.typography.headlineSmall)
             Text(status.message ?: "No runtime message")
@@ -152,22 +152,23 @@ private fun GatewayCard(status: RuntimeStatus, running: Boolean, busy: Boolean, 
 }
 
 @Composable
-private fun HealthCard(status: RuntimeStatus) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun HealthCard(status: RuntimeStatus, snapshot: online.omniroute.mobile.gateway.GatewaySnapshot?, viewModel: RuntimeViewModel) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Health", style = MaterialTheme.typography.titleLarge)
-            Text("Gateway: ${if (status.state == RuntimeState.RUNNING) "Running" else "Not verified"}")
-            Text("Routing: Not loaded")
-            Text("Providers: Not loaded")
-            Text("Live API health will appear when the gateway client verifies the running server.")
+            Text("Gateway: ${if (snapshot != null) "Healthy" else "Not verified"}")
+            Text("Models discovered: ${snapshot?.models?.count ?: "—"}")
+            Text("Resilience: ${if (snapshot?.resilience != null) "Connected" else "Not loaded"}")
+            Text("Rate limits: ${if (snapshot?.rateLimits != null) "Connected" else "Not loaded"}")
+            OutlinedButton(onClick = viewModel::refresh) { Text("Refresh") }
         }
     }
 }
 
 @Composable
 private fun RuntimeCard(status: RuntimeStatus) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Runtime", style = MaterialTheme.typography.titleLarge)
             Text("Termux-managed runtime")
             Text("Port: ${status.port}")
@@ -178,59 +179,24 @@ private fun RuntimeCard(status: RuntimeStatus) {
 }
 
 @Composable
-private fun ProvidersScreen(modifier: Modifier = Modifier) = PlaceholderScreen(
-    modifier,
-    "Providers",
-    "Connect providers securely. API keys will be stored using Android Keystore and never shown in plaintext.",
-    listOf("Provider discovery", "Connection testing", "Secure key management", "Model availability"),
-)
+private fun ProvidersScreen(modelCount: Int?, modifier: Modifier = Modifier) = PlaceholderScreen(modifier, "Providers", "Live model discovery is connected to /v1/models. Provider administration is next.", listOf("Discovered models: ${modelCount ?: "—"}", "Connection testing", "Secure key management"))
 
 @Composable
-private fun RoutingScreen(modifier: Modifier = Modifier) = PlaceholderScreen(
-    modifier,
-    "Routing",
-    "Configure how OmniRoute selects models and handles provider failures.",
-    listOf("Strategy: Balanced", "Automatic failover", "Health scoring", "Circuit breaker", "Retries and timeouts"),
-)
+private fun RoutingScreen(status: RuntimeStatus, modifier: Modifier = Modifier) = PlaceholderScreen(modifier, "Routing", "Gateway connectivity is live. Routing controls will be wired to the supported server configuration API.", listOf("Gateway state: ${status.state}", "Automatic failover", "Health scoring", "Circuit breaker"))
 
 @Composable
-private fun UsageScreen(modifier: Modifier = Modifier) = PlaceholderScreen(
-    modifier,
-    "Usage",
-    "Live usage metrics will be populated from the OmniRoute API once the gateway client is connected.",
-    listOf("Requests", "Tokens", "Provider distribution", "Success rate", "Fallback rate"),
-)
+private fun UsageScreen(rateLimits: String?, modifier: Modifier = Modifier) = PlaceholderScreen(modifier, "Usage", "Live rate-limit data is queried from /api/rate-limits. Full request/token analytics require a supported telemetry endpoint.", listOf("Rate limits: ${if (rateLimits != null) "Connected" else "—"}", "Requests: server telemetry required", "Tokens: server telemetry required"))
 
 @Composable
-private fun SettingsScreen(status: RuntimeStatus, modifier: Modifier = Modifier) = PlaceholderScreen(
-    modifier,
-    "Settings",
-    "Runtime and security controls.",
-    listOf(
-        "OmniRoute runtime: managed",
-        "Version: 3.8.49",
-        "Gateway: 127.0.0.1:${status.port}",
-        "Credentials: Android Keystore",
-        "Remote gateway support: planned",
-        "Diagnostics export: planned",
-    ),
-)
+private fun SettingsScreen(status: RuntimeStatus, modifier: Modifier = Modifier) = PlaceholderScreen(modifier, "Settings", "Runtime and security controls.", listOf("OmniRoute runtime: managed", "Version: 3.8.49", "Gateway: 127.0.0.1:${status.port}", "Credentials: Android Keystore"))
 
 @Composable
 private fun PlaceholderScreen(modifier: Modifier, title: String, description: String, rows: List<String>) {
-    Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(title, style = MaterialTheme.typography.headlineMedium)
         Text(description, style = MaterialTheme.typography.bodyLarge)
-        rows.forEach { row ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) { Text(row, style = MaterialTheme.typography.bodyLarge) }
-            }
-        }
+        rows.forEach { row -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(row, style = MaterialTheme.typography.bodyLarge) } } }
         HorizontalDivider()
-        Text("This screen is scaffolded without fabricated live data.")
     }
 }
 
