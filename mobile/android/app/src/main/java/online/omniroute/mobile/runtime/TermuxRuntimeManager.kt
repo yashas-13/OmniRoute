@@ -12,7 +12,7 @@ interface TermuxCommandRunner {
 
 class TermuxIntentCommandRunner(private val context: Context) : TermuxCommandRunner {
     override suspend fun run(command: List<String>): Result<Unit> = withContext(Dispatchers.Main) {
-        runCatching {
+        try {
             require(command.isNotEmpty()) { "Empty command" }
             require(command.first() == "/data/data/com.termux/files/usr/bin/bash") {
                 "Only the managed Termux bash entrypoint is allowed"
@@ -25,6 +25,9 @@ class TermuxIntentCommandRunner(private val context: Context) : TermuxCommandRun
                 putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
             }
             context.startService(intent)
+            Result.success(Unit)
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
     }
 }
