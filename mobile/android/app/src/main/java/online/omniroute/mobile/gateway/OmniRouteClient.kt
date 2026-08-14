@@ -17,18 +17,19 @@ class OmniRouteClient(
 ) {
     private val http = client
 
-    suspend fun health(): Result<String> = get("/api/health")
-
-    suspend fun capabilities(): Result<String> = get("/api/capabilities")
-
-    suspend fun providers(): Result<String> = get("/api/providers")
+    suspend fun ping(): Result<String> = get("/v1/models")
 
     suspend fun models(): Result<String> = get("/v1/models")
+
+    suspend fun resilience(): Result<String> = get("/api/resilience")
+
+    suspend fun rateLimits(): Result<String> = get("/api/rate-limits")
 
     private suspend fun get(path: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val requestBuilder = Request.Builder()
                 .url(baseUrl.trimEnd('/') + path)
+                .header("Accept", "application/json")
                 .get()
             apiKeyProvider()?.takeIf { it.isNotBlank() }?.let {
                 requestBuilder.header("Authorization", "Bearer $it")
