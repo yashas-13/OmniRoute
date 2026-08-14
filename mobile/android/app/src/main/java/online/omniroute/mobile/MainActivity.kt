@@ -3,6 +3,7 @@ package online.omniroute.mobile
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,23 +17,37 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import online.omniroute.mobile.runtime.RuntimePolicy
+import online.omniroute.mobile.runtime.RuntimeState
+import online.omniroute.mobile.runtime.RuntimeViewModel
+import online.omniroute.mobile.runtime.RuntimeViewModelFactory
+import online.omniroute.mobile.runtime.TermuxIntentCommandRunner
+import online.omniroute.mobile.runtime.TermuxRuntimeManager
 
 class MainActivity : ComponentActivity() {
+    private val runtimeViewModel: RuntimeViewModel by viewModels {
+        RuntimeViewModelFactory(
+            TermuxRuntimeManager(
+                runner = TermuxIntentCommandRunner(applicationContext),
+                policy = RuntimePolicy(),
+            ),
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { OmniRouteScreen() }
+        setContent { OmniRouteScreen(runtimeViewModel) }
     }
 }
 
-@androidx.compose.runtime.Composable
-private fun OmniRouteScreen() {
-    var status by remember { mutableStateOf("Runtime unavailable") }
+@Composable
+private fun OmniRouteScreen(viewModel: RuntimeViewModel) {
+    val status by viewModel.status.collectAsStateWithLifecycle()
 
     MaterialTheme {
         Scaffold { padding ->
@@ -47,20 +62,23 @@ private fun OmniRouteScreen() {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Gateway", style = MaterialTheme.typography.titleLarge)
                         Spacer(Modifier.height(8.dp))
-                        Text(status)
+                        Text(status.state.name)
+                        status.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         Spacer(Modifier.height(16.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { status = "Install/start integration pending runtime permission" }) {
-                                Text("Start")
-                            }
-                            Button(onClick = { status = "Stop requested" }) {
-                                Text("Stop")
-                            }
+                            Button(
+                                enabled = status.state !in setOf(RuntimeState.INSTALLING, RuntimeState.STARTING, RuntimeState.STOPPING),
+                                onClick = viewModel::installAndStart,
+                            ) { Text("Start") }
+                            Button(
+                                enabled = status.state == RuntimeState.RUNNING || status.state == RuntimeState.DEGRADED,
+                                onClick = viewModel::stop,
+                            ) { Text("Stop") }
                         }
                     }
                 }
 
-                Text("Runtime: Termux-managed OmniRoute", style = MaterialTheme.typography.bodyMedium)
+                Text("Runtime: dedicated Termux workspace", style = MaterialTheme.typography.bodyMedium)
                 Text("Gateway: 127.0.0.1:20128", style = MaterialTheme.typography.bodyMedium)
             }
         }
