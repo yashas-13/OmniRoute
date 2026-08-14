@@ -34,6 +34,7 @@ class TermuxRuntimeManager(
     private val policy: RuntimePolicy,
 ) {
     private val runtimeRoot = policy.validateChildPath(policy.workingDirectory)
+    private val omniRouteVersion = "3.8.49"
 
     suspend fun bootstrap(): Result<Unit> {
         val home = shellQuote(policy.homeDirectory)
@@ -50,7 +51,7 @@ class TermuxRuntimeManager(
             if [ ! -f package.json ]; then
               printf '%s\\n' '{"private":true,"type":"module"}' > package.json
             fi
-            npm install --no-save omniroute
+            npm install --no-save omniroute@$omniRouteVersion
         """.trimIndent()
         return runner.run(bash(script))
     }
@@ -60,7 +61,15 @@ class TermuxRuntimeManager(
         val root = shellQuote(runtimeRoot)
         val log = shellQuote("$runtimeRoot/omniroute.log")
         val pid = shellQuote("$runtimeRoot/.omniroute.pid")
-        val command = "cd $root && export HOME=$home && export OMNIROUTE_HOST=127.0.0.1 && export PORT=${policy.port} && nohup omniroute >> $log 2>&1 & echo \$! > $pid"
+        val command = """
+            set -eu
+            cd $root
+            export HOME=$home
+            export OMNIROUTE_HOST=127.0.0.1
+            export PORT=${policy.port}
+            nohup omniroute >> $log 2>&1 &
+            echo \$! > $pid
+        """.trimIndent()
         return runner.run(bash(command))
     }
 
