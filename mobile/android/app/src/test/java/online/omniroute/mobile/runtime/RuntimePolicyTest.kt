@@ -1,9 +1,9 @@
 package online.omniroute.mobile.runtime
 
-import kotlin.test.Test
-import kotlin.test.assertFailsWith
-import kotlin.test.assertSame
 import java.io.File
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class RuntimePolicyTest {
     @Test
@@ -11,7 +11,7 @@ class RuntimePolicyTest {
         val root = File("/tmp/omniroute-runtime")
         val policy = RuntimePolicy(homeDirectory = File("/tmp/omniroute-home"), workingDirectory = root)
         val child = policy.validateChildPath(File(root, "logs/runtime.log"))
-        assertSame(child, child)
+        assertEquals(File(root, "logs/runtime.log").canonicalPath, child.path)
     }
 
     @Test
