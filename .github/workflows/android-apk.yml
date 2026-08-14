@@ -29,18 +29,28 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Android SDK CLI
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 16 SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
 
-      - name: Build debug APK
+      - name: Clean build debug APK
         working-directory: ${{ env.ANDROID_DIR }}
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon clean assembleDebug
 
       - name: Verify APK exists
         working-directory: ${{ env.ANDROID_DIR }}
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          file app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
