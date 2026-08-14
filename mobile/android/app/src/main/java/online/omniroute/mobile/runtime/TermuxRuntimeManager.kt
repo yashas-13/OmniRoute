@@ -1,5 +1,6 @@
 package online.omniroute.mobile.runtime
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import kotlinx.coroutines.Dispatchers
@@ -17,11 +18,12 @@ class TermuxIntentCommandRunner(private val context: Context) : TermuxCommandRun
                 "Only the managed Termux bash entrypoint is allowed"
             }
             val intent = Intent("com.termux.RUN_COMMAND").apply {
-                setPackage("com.termux")
+                component = ComponentName("com.termux", "com.termux.app.RunCommandService")
                 putExtra("com.termux.RUN_COMMAND_PATH", command.first())
                 putExtra("com.termux.RUN_COMMAND_ARGUMENTS", command.drop(1).toTypedArray())
+                putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home")
                 putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra("com.termux.RUN_COMMAND_COMMAND_LABEL", "OmniRoute runtime")
             }
             context.startService(intent)
         }
