@@ -22,7 +22,8 @@ pkg install nodejs-lts git python make clang
 
 Check storage and runtime details:
 
-```df -h "$HOME"
+```sh
+df -h "$HOME"
 node --version
 npm --version
 node -p 'JSON.stringify({platform: process.platform, arch: process.arch, execPath: process.execPath}, null, 2)'
@@ -81,7 +82,8 @@ ls -l "$(command -v omniroute)" 2>/dev/null
 
 Termux usually keeps `env` at `$PREFIX/bin/env`; standard Linux npm shims may start with `#!/usr/bin/env node`. If the installed executable fails with `bad interpreter`, inspect it:
 
-```command -v omniroute
+```sh
+command -v omniroute
 head -n 1 "$(command -v omniroute)"
 command -v env
 printf 'PREFIX=%s\n' "$PREFIX"
@@ -106,7 +108,8 @@ node -p 'process.execPath'
 
 For diagnosis only, compare with a clean environment and the native Termux Node binary (usually `$PREFIX/bin/node`):
 
-```env -u NODE_OPTIONS "$PREFIX/bin/node" --version
+```sh
+env -u NODE_OPTIONS "$PREFIX/bin/node" --version
 env -u NODE_OPTIONS "$PREFIX/bin/node" -p 'JSON.stringify({platform:process.platform, arch:process.arch, execPath:process.execPath})'
 ```
 
