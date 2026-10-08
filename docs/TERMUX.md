@@ -187,6 +187,79 @@ npm uninstall --global omniroute
 
 Only remove npm cache data if you need the space and understand that a later installation may need to download it again. Avoid deleting the entire Termux prefix or broad directories as a troubleshooting shortcut.
 
+## Termux-specific compatibility fixes (Android ARM64)
+
+The following issues were observed while validating OmniRoute 3.8.51 on Termux. They are conditional workarounds: apply them only when the matching error occurs, and re-check the installed release after upgrades.
+
+### Use a supported native Termux Node.js runtime
+
+OmniRoute rejects Node.js v22.22.0; the patched minimum for the 22.x line is v22.22.2. Node.js 24.x or 26.x is also supported by the tested release. In Termux, check the native binary directly rather than trusting a shell wrapper earlier in `PATH`:
+
+```sh
+pkg install nodejs python make clang
+"$PREFIX/bin/node" --version
+```
+
+If `nodejs` is installed but `$PREFIX/bin/node` was replaced by a compatibility wrapper, restore the Termux package binary and verify the result:
+
+```sh
+pkg reinstall nodejs
+"$PREFIX/bin/node" --version
+```
+
+Only do this when you have confirmed the native Termux Node executable was replaced. Some development environments deliberately install wrappers; keep those wrappers intact and call the native binary explicitly for OmniRoute.
+
+### Fix the npm executable's Linux shebang on Termux
+
+If `omniroute` fails with `/usr/bin/env: bad interpreter`, the npm-installed entry point is using a Linux path that does not exist in Android. Do not create a fake `/usr/bin/env` symlink. A local launcher can call the native Termux Node directly and supply writable temporary/cache directories:
+
+```sh
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+cat > "$PREFIX/bin/omniroute" <<'SH'
+#!/data/data/com.termux/files/usr/bin/sh
+set -eu
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+export TMPDIR="${TMPDIR:-$HOME/tmp}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export DATA_DIR="${DATA_DIR:-$HOME/.omniroute}"
+unset NODE_OPTIONS LD_PRELOAD
+mkdir -p "$TMPDIR" "$XDG_CACHE_HOME" "$DATA_DIR"
+exec "$PREFIX/bin/node" "$PREFIX/lib/node_modules/omniroute/bin/omniroute.mjs" "$@"
+SH
+chmod 700 "$PREFIX/bin/omniroute"
+omniroute --version
+omniroute --help
+```
+
+This launcher is local to the Termux installation and may be replaced by a later npm upgrade. If your npm global prefix differs, update the path to the package entry point.
+
+### Fix an esbuild Linux/Android mismatch
+
+If the error says `@esbuild/linux-arm64` is present but Android needs `@esbuild/android-arm64`, install the Android package at the *exact same version* as the installed esbuild package:
+
+```sh
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+OMNI="$PREFIX/lib/node_modules/omniroute"
+ESBUILD_VERSION=$("$PREFIX/bin/node" -p "require('$PREFIX/lib/node_modules/omniroute/node_modules/esbuild/package.json').version")
+mkdir -p "$HOME/tmp/esbuild-android" "$OMNI/node_modules/@esbuild/android-arm64"
+npm pack "@esbuild/android-arm64@$ESBUILD_VERSION" --pack-destination "$HOME/tmp/esbuild-android"
+tar -xzf "$HOME/tmp/esbuild-android/esbuild-android-arm64-$ESBUILD_VERSION.tgz" -C "$OMNI/node_modules/@esbuild/android-arm64" --strip-components=1
+```
+
+This is a targeted repair for that error, not a general instruction to copy native modules between platforms. Recheck after upgrading OmniRoute or esbuild.
+
+### Build the SQLite native runtime when no Android prebuild exists
+
+The tested release did not provide a matching `better-sqlite3` Android prebuild. Install the normal Termux build tools and first try OmniRoute's own repair command:
+
+```sh
+pkg install python make clang
+omniroute runtime repair
+omniroute runtime check
+```
+
+If repair fails because `prebuild-install` or `node-gyp` cannot be found, or their `#!/usr/bin/env node` shebang fails, the runtime may need those tools installed and invoked through the native Termux Node. Use the exact `better-sqlite3` version required by the installed release; build it for the current Termux Node ABI, not the compatibility-wrapper Node version. A successful native build should produce a valid `better_sqlite3.node` under `$HOME/.omniroute/runtime/node_modules/better-sqlite3/build/Release/`. Confirm it with `omniroute runtime check` and `omniroute doctor --no-liveness` before starting the server.
+
 ## Compatibility caveat
 
 This guide describes a careful installation and verification workflow, not a guarantee that every OmniRoute feature is supported on Android. Validate the CLI, server, providers, networking, and any native/desktop-dependent feature independently against the exact release being used.
